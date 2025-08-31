@@ -1,0 +1,16 @@
+node_modules
+dist
+build
+coverage
+*.lock
+*.log
+.env
+.env.*
+public
+.git
+.next
+.nuxt
+.vscode
+.idea
+*.min.js
+*.min.css

@@ -1,0 +1,83 @@
+name: Quality Gate
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  quality-gate:
+    name: Quality Gate Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run comprehensive quality check
+        run: npm run quality-check
+
+      - name: Check test coverage threshold
+        run: npm run test:coverage
+
+      - name: Validate build
+        run: npm run build
+
+      - name: Comment PR with quality results
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+
+            // Read coverage report if exists
+            let coverageReport = '';
+            try {
+              const coverage = JSON.parse(fs.readFileSync('./coverage/coverage-summary.json', 'utf8'));
+              const total = coverage.total;
+              coverageReport = `
+            ## 📊 Test Coverage Report
+
+            | Metric | Percentage | Status |
+            |--------|------------|---------|
+            | Lines | ${total.lines.pct}% | ${total.lines.pct >= 80 ? '✅' : '❌'} |
+            | Statements | ${total.statements.pct}% | ${total.statements.pct >= 80 ? '✅' : '❌'} |
+            | Functions | ${total.functions.pct}% | ${total.functions.pct >= 80 ? '✅' : '❌'} |
+            | Branches | ${total.branches.pct}% | ${total.branches.pct >= 80 ? '✅' : '❌'} |
+            `;
+            } catch (error) {
+              coverageReport = '❌ Coverage report not found';
+            }
+
+            const comment = `
+            ## 🚦 Quality Gate Results
+
+            ${coverageReport}
+
+            ### ✅ Quality Checks Completed
+            - Type checking
+            - ESLint analysis  
+            - Prettier formatting
+            - Unit tests
+            - Build validation
+
+            *Quality gate enforced on: ${new Date().toISOString()}*
+            `;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
